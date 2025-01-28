@@ -29,7 +29,6 @@ library(doParallel)
 library(kableExtra)
 library(jtools)
 library(vip)
-
 ```
 
 ```{r dataload}
@@ -47,20 +46,19 @@ year5 <- readARFF("polish_companies_bankruptcy_data/5year.arff")
 
 ```{r datamerge}
 # add a year variable to each dataset to keep track of which row is from which year
-year1 = year1 %>%
+year1 <- year1 %>%
   mutate(year = 1)
-year2 = year2 %>%
+year2 <- year2 %>%
   mutate(year = 2)
-year3 = year3 %>%
+year3 <- year3 %>%
   mutate(year = 3)
-year4 = year4 %>%
+year4 <- year4 %>%
   mutate(year = 4)
-year5 = year5 %>%
+year5 <- year5 %>%
   mutate(year = 5)
 
 # merge all datasets together
 allyears <- rbind(year1, year2, year3, year4, year5)
-
 ```
 
 ## Formatting Data
@@ -135,7 +133,6 @@ allyears_renamed <- allyears %>%
     S_STL = Attr63,
     S_FA = Attr64
   )
-
 ```
 
 ## Dealing with Missing Values
@@ -165,13 +162,14 @@ levels(modeldata$class_factor)
 table(modeldata$class_factor)
 
 # remove previous iterations of the dataset to save memory
-rm(year1, year2, year3, year4, year5, allyears, allyears_comp, allyears_imp, allyears_renamed)
+rm(year1, year2, year3, year4, year5, allyears,
+   allyears_comp, allyears_imp, allyears_renamed)
 
 # train/test split
 set.seed(6302)
 bankrupt_split <- initial_split(modeldata, prop = 0.70, strata = class_factor)
 bankrupt_train <- training(bankrupt_split)
-bankrupt_test  <-  testing(bankrupt_split)
+bankrupt_test <- testing(bankrupt_split)
 ```
 
 # Data Modeling
@@ -180,15 +178,15 @@ bankrupt_test  <-  testing(bankrupt_split)
 
 ```{r basic_lr}
 # create base recipe
-base_rec <- recipe(class_factor ~., data = bankrupt_train) %>%
+base_rec <- recipe(class_factor ~ ., data = bankrupt_train) %>%
   step_normalize(all_numeric_predictors()) %>%
   step_corr(threshold = 0.8) %>%
   step_nzv()
 
 # create base model
-base_model <- logistic_reg() %>% 
-                  set_mode("classification") %>%
-                  set_engine("glm") 
+base_model <- logistic_reg() %>%
+  set_mode("classification") %>%
+  set_engine("glm")
 
 # create base workflow
 base_wf <- workflow() %>%
@@ -203,7 +201,8 @@ base_coefs <- base_wf %>%
 
 # fit model to test data
 base_fit <- last_fit(base_wf, bankrupt_split,
-                     metrics = metric_set(accuracy, roc_auc, kap, sens, spec, brier_class))
+  metrics = metric_set(accuracy, roc_auc, kap, sens, spec, brier_class)
+)
 
 base_metrics <- base_fit %>% collect_metrics()
 base_preds <- base_fit %>% collect_predictions()
@@ -215,17 +214,18 @@ base_preds <- base_fit %>% collect_predictions()
 base_probs_facet <- base_preds %>%
   ggplot(aes(.pred_Yes)) +
   geom_histogram(col = "white", bins = 40) +
-  facet_wrap(~ class_factor, ncol = 2, scales = "free") +
+  facet_wrap(~class_factor, ncol = 2, scales = "free") +
   theme_bw() +
-  labs(x = "Probability Estimate of Bankrupcy", y = "Count", title = "Predicted Probabilty of Bankrupcy by Actual Outcome (Basic Logistic Regression)")
-
+  labs(x = "Probability Estimate of Bankrupcy",
+       y = "Count",
+       title = "Predicted Probabilty of Bankrupcy by Actual Outcome (Basic Logistic Regression)")
 ```
 
 ### Basic Logistic Regression with SMOTE Upsampling
 
 ```{r base_lr_smote}
 # create base recipe
-base_smote_rec <- recipe(class_factor ~., data = bankrupt_train) %>%
+base_smote_rec <- recipe(class_factor ~ ., data = bankrupt_train) %>%
   step_normalize(all_numeric_predictors()) %>%
   step_corr(threshold = 0.8) %>%
   step_nzv() %>%
@@ -247,8 +247,8 @@ fivefold <- vfold_cv(bankrupt_train, v = 5, strata = class_factor)
 #   resamples = fivefold,
 #   grid = over_ratio_grid,
 #   metrics = metric_set(roc_auc, spec))
-# 
-# saveRDS(base_smote_tune, "/Users/colewagner632/Library/CloudStorage/OneDrive-SouthernMethodistUniversity/STAT 6302/Projects/Final Project/base_smote_tune.rds")
+#
+# saveRDS(base_smote_tune, "rds_files/base_smote_tune.rds")
 
 base_smote_tune <- readRDS("rds_files/base_smote_tune.rds")
 
@@ -268,17 +268,17 @@ base_smote_coefs <- base_smote_wf_final %>%
 # fit to test set and get performance metrics
 set.seed(6302)
 base_smote_fit <- last_fit(base_smote_wf_final, bankrupt_split,
-                     metrics = metric_set(accuracy, roc_auc, kap, sens, spec, brier_class))
+  metrics = metric_set(accuracy, roc_auc, kap, sens, spec, brier_class)
+)
 
 base_smote_metrics <- base_smote_fit %>% collect_metrics()
-
 ```
 
 ## PCA
 
 ```{r pca}
 # create a pca recipe
-pca_rec <- recipe(class_factor ~., data = bankrupt_train) %>%
+pca_rec <- recipe(class_factor ~ ., data = bankrupt_train) %>%
   step_normalize(all_numeric_predictors()) %>%
   step_corr(threshold = 0.8) %>%
   step_nzv() %>%
@@ -287,24 +287,26 @@ pca_rec <- recipe(class_factor ~., data = bankrupt_train) %>%
 pca_prep <- prep(pca_rec)
 
 pca_variance <- tidy(pca_prep, id = "pca", type = "variance") %>%
-                        pivot_wider(names_from = terms,
-                                    values_from = value) %>%
-                        clean_names()
+  pivot_wider(
+    names_from = terms,
+    values_from = value
+  ) %>%
+  clean_names()
 
 # Scree plot
 pca_scree <- pca_variance %>%
-  ggplot(aes(x = component, y= percent_variance)) +
+  ggplot(aes(x = component, y = percent_variance)) +
   geom_col() +
   theme_bw() +
-  labs(x = "PC", y = "% Variance Explained", title = "Percentage Variance Explained by Each Principal Component")
-
+  labs(x = "PC", y = "% Variance Explained",
+       title = "Percentage Variance Explained by Each Principal Component")
 ```
 
 ### Base LR w/ PCA and SMOTE
 
 ```{r pca_model}
 # create a pca recipe
-pca_smote_rec <- recipe(class_factor ~., data = bankrupt_train) %>%
+pca_smote_rec <- recipe(class_factor ~ ., data = bankrupt_train) %>%
   step_normalize(all_numeric_predictors()) %>%
   step_corr(threshold = 0.8) %>%
   step_nzv() %>%
@@ -316,14 +318,16 @@ pca_smote_base_wf <- workflow() %>%
   add_model(base_model)
 
 set.seed(6302)
-pca_smote_base_tune <-  tune_grid(
+pca_smote_base_tune <- tune_grid(
   pca_smote_base_wf,
   resamples = fivefold,
   grid = over_ratio_grid,
-  metrics = metric_set(roc_auc, spec))
+  metrics = metric_set(roc_auc, spec)
+)
 
 # best over ratio
-pca_smote_base_best_ratio <- pca_smote_base_tune %>% select_best(metric = "roc_auc")
+pca_smote_base_best_ratio <- pca_smote_base_tune %>%
+  select_best(metric = "roc_auc")
 
 # update workflow
 pca_smote_base_wf_final <- pca_smote_base_wf %>%
@@ -338,12 +342,12 @@ pca_smote_base_coefs <- pca_smote_base_wf_final %>%
 # fit to test set and get performance metrics
 set.seed(6302)
 pca_smote_base_fit <- last_fit(pca_smote_base_wf_final, bankrupt_split,
-                     metrics = metric_set(accuracy, roc_auc, kap, sens, spec, brier_class))
+  metrics = metric_set(accuracy, roc_auc, kap, sens, spec, brier_class)
+)
 
 pca_smote_base_metrics <- pca_smote_base_fit %>% collect_metrics()
 
 pca_smote_base_preds <- pca_smote_base_fit %>% collect_predictions()
-
 ```
 
 ## Penalized Logistic Regression
@@ -351,9 +355,10 @@ pca_smote_base_preds <- pca_smote_base_fit %>% collect_predictions()
 ```{r penreg}
 # set a enet model (mixture needs tuning)
 enet_model <- logistic_reg(
-                  penalty = tune(),
-                  mixture = tune()) %>%
-                  set_engine("glmnet")
+  penalty = tune(),
+  mixture = tune()
+) %>%
+  set_engine("glmnet")
 
 # create workflow
 enet_base_wf <- workflow() %>%
@@ -362,7 +367,7 @@ enet_base_wf <- workflow() %>%
 
 # Using a space-filling design for tuning parameters
 enet_param <- extract_parameter_set_dials(enet_model)
-glh_enet <- grid_latin_hypercube(enet_param, size=10)
+glh_enet <- grid_latin_hypercube(enet_param, size = 10)
 
 
 # tune penalty
@@ -376,8 +381,8 @@ glh_enet <- grid_latin_hypercube(enet_param, size=10)
 #               grid = glh_enet,
 #               metrics = metric_set(roc_auc, spec))
 # stopCluster(cl)
-# 
-# saveRDS(enet_base_tune, "/Users/colewagner632/Library/CloudStorage/OneDrive-SouthernMethodistUniversity/STAT 6302/Projects/Final Project/enet_base_tune.rds")
+#
+# saveRDS(enet_base_tune, "rds_files_enet_base_tune.rds")
 enet_base_tune <- readRDS("rds_files_enet_base_tune.rds")
 
 enet_base_best_params <- enet_base_tune %>% select_best(metric = "roc_auc")
@@ -394,10 +399,10 @@ enet_base_fit <- enet_base_final_workflow %>%
 # fit to test set and get performance metrics
 set.seed(6302)
 enet_base_fit <- last_fit(enet_base_final_workflow, bankrupt_split,
-                     metrics = metric_set(accuracy, roc_auc, kap, sens, spec, brier_class))
+  metrics = metric_set(accuracy, roc_auc, kap, sens, spec, brier_class)
+)
 
 enet_base_metrics <- enet_base_fit %>% collect_metrics()
-
 ```
 
 ### Penalized Logistic Regression with SMOTE
@@ -421,8 +426,8 @@ enet_smote_grid <- crossing(over_ratio_grid, glh_enet)
 #   grid = enet_smote_grid,
 #   metrics = metric_set(roc_auc, spec))
 # stopCluster(cl)
-# 
-# saveRDS(enet_smote_tune, "/Users/colewagner632/Library/CloudStorage/OneDrive-SouthernMethodistUniversity/STAT 6302/Projects/Final Project/enet_smote_tune.rds")
+#
+# saveRDS(enet_smote_tune, "rds_files/enet_smote_tune.rds")
 
 enet_smote_tune <- readRDS("rds_files/enet_smote_tune.rds")
 
@@ -442,12 +447,12 @@ enet_smote_coefs <- enet_smote_wf_final %>%
 # fit to test set and get performance metrics
 set.seed(6302)
 enet_smote_fit <- last_fit(enet_smote_wf_final, bankrupt_split,
-                     metrics = metric_set(accuracy, roc_auc, kap, sens, spec, brier_class))
+  metrics = metric_set(accuracy, roc_auc, kap, sens, spec, brier_class)
+)
 
 enet_smote_metrics <- enet_smote_fit %>% collect_metrics()
 
 enet_smote_preds <- enet_smote_fit %>% collect_predictions()
-
 ```
 
 #### Visualization
@@ -456,9 +461,11 @@ enet_smote_preds <- enet_smote_fit %>% collect_predictions()
 enet_smote_probs_facet <- enet_smote_preds %>%
   ggplot(aes(.pred_Yes)) +
   geom_histogram(col = "white", bins = 40) +
-  facet_wrap(~ class_factor, ncol = 2, scales = "free") +
+  facet_wrap(~class_factor, ncol = 2, scales = "free") +
   theme_bw() +
-  labs(x = "Probability Estimate of Bankrupcy", y = "Count", title = "Predicted Probabilty of Bankrupcy by Actual Outcome (Elastic Net w/ SMOTE)")
+  labs(x = "Probability Estimate of Bankrupcy",
+       y = "Count",
+       title = "Predicted Probabilty of Bankrupcy by Actual Outcome (Elastic Net w/ SMOTE)")
 ```
 
 ### Penalized Logistic Regression w/ PCA and SMOTE
@@ -478,8 +485,8 @@ pca_smote_enet_wf <- workflow() %>%
 #   grid = enet_smote_grid,
 #   metrics = metric_set(roc_auc, spec))
 # stopCluster(cl)
-# 
-# saveRDS(pca_smote_enet_tune, "/Users/colewagner632/Library/CloudStorage/OneDrive-SouthernMethodistUniversity/STAT 6302/Projects/Final Project/pca_smote_enet_tune.rds")
+#
+# saveRDS(pca_smote_enet_tune, "rds_files/pca_smote_enet_tune.rds")
 
 pca_smote_enet_tune <- readRDS("rds_files/pca_smote_enet_tune.rds")
 
@@ -499,42 +506,43 @@ pca_smote_enet_coefs <- pca_smote_enet_wf_final %>%
 # fit to test set and get performance metrics
 set.seed(6302)
 pca_smote_enet_fit <- last_fit(pca_smote_enet_wf_final, bankrupt_split,
-                     metrics = metric_set(accuracy, roc_auc, kap, sens, spec, brier_class))
+  metrics = metric_set(accuracy, roc_auc, kap, sens, spec, brier_class)
+)
 
 pca_smote_enet_metrics <- pca_smote_enet_fit %>% collect_metrics()
-
 ```
 
 ## XG Boost
 
 ```{r xgb}
 # create an xgboost recipe
-xgb_rec <- recipe(class_factor ~ ., data=bankrupt_train) %>%
-                  step_normalize(all_numeric_predictors())
+xgb_rec <- recipe(class_factor ~ ., data = bankrupt_train) %>%
+  step_normalize(all_numeric_predictors())
 
 # set up model
 xgb_base_model <- boost_tree(
-                  mode = "classification",
-                  mtry = tune(),
-                  trees = tune(),
-                  min_n = tune(),
-                  tree_depth = tune(),
-                  learn_rate = tune(),
-                  loss_reduction = tune(),
-                  sample_size = tune(),
-                  stop_iter = tune()) %>%
-                  set_engine("xgboost")
+  mode = "classification",
+  mtry = tune(),
+  trees = tune(),
+  min_n = tune(),
+  tree_depth = tune(),
+  learn_rate = tune(),
+  loss_reduction = tune(),
+  sample_size = tune(),
+  stop_iter = tune()
+) %>%
+  set_engine("xgboost")
 
 # set up workflow
-xgb_base_wf <- workflow() %>% 
-                    add_recipe(xgb_rec) %>% 
-                    add_model(xgb_base_model)
+xgb_base_wf <- workflow() %>%
+  add_recipe(xgb_rec) %>%
+  add_model(xgb_base_model)
 
 # create tuning parameter grid
-xgb_base_param <- extract_parameter_set_dials(xgb_base_model) %>% 
-                  finalize(juice(prep(xgb_rec)))
+xgb_base_param <- extract_parameter_set_dials(xgb_base_model) %>%
+  finalize(juice(prep(xgb_rec)))
 
-glh_base_xgb <- grid_latin_hypercube(xgb_base_param, size=3)
+glh_base_xgb <- grid_latin_hypercube(xgb_base_param, size = 3)
 
 # set.seed(6302)
 # ncores <- 7
@@ -545,10 +553,10 @@ glh_base_xgb <- grid_latin_hypercube(xgb_base_param, size=3)
 #                       resamples = fivefold,
 #                       grid = glh_base_xgb)
 # stopCluster(cl)
-# 
-# saveRDS(xgb_base_tune, '/Users/colewagner632/Library/CloudStorage/OneDrive-SouthernMethodistUniversity/STAT 6302/Projects/Final Project/xgb_base_tune.rds')
+#
+# saveRDS(xgb_base_tune, "rds_files/xgb_base_tune.rds")
 
-xgb_base_tune <- readRDS('rds_files/xgb_base_tune.rds')
+xgb_base_tune <- readRDS("rds_files/xgb_base_tune.rds")
 
 # finalize wf with best params
 xgb_base_best_param <- xgb_base_tune %>% select_best(metric = "roc_auc")
@@ -561,10 +569,10 @@ xgb_base_final_wf <- xgb_base_wf %>%
 # xgb_base_fit <- last_fit(xgb_base_final_wf, bankrupt_split,
 #                           metrics = metric_set(accuracy, roc_auc, kap,
 # 			                                   sens, spec, brier_class))
-# 
-# saveRDS(xgb_base_fit, '/Users/colewagner632/Library/CloudStorage/OneDrive-SouthernMethodistUniversity/STAT 6302/Projects/Final Project/xgb_base_fit.rds')
+#
+# saveRDS(xgb_base_fit, "rds_files/xgb_base_fit.rds")
 
-xgb_base_fit <- readRDS('rds_files/xgb_base_fit.rds')
+xgb_base_fit <- readRDS("rds_files/xgb_base_fit.rds")
 
 xgb_base_metrics <- xgb_base_fit %>% collect_metrics()
 ```
@@ -573,19 +581,19 @@ xgb_base_metrics <- xgb_base_fit %>% collect_metrics()
 
 ```{r xgb_smote}
 # create an xgb recipe with smote
-xgb_smote_rec <- recipe(class_factor ~ ., data=bankrupt_train) %>%
-                  step_normalize(all_numeric_predictors()) %>%
-                  step_smote(class_factor, over_ratio = 0.75)
+xgb_smote_rec <- recipe(class_factor ~ ., data = bankrupt_train) %>%
+  step_normalize(all_numeric_predictors()) %>%
+  step_smote(class_factor, over_ratio = 0.75)
 
 
-xgb_smote_wf <- workflow() %>% 
-                    add_recipe(xgb_smote_rec) %>% 
-                    add_model(xgb_base_model)
+xgb_smote_wf <- workflow() %>%
+  add_recipe(xgb_smote_rec) %>%
+  add_model(xgb_base_model)
 
-xgb_smote_param <- extract_parameter_set_dials(xgb_base_model) %>% 
-                  finalize(juice(prep(xgb_smote_rec)))
+xgb_smote_param <- extract_parameter_set_dials(xgb_base_model) %>%
+  finalize(juice(prep(xgb_smote_rec)))
 
-glh_smote_xgb <- grid_latin_hypercube(xgb_smote_param, size=3)
+glh_smote_xgb <- grid_latin_hypercube(xgb_smote_param, size = 3)
 
 # set.seed(6302)
 # ncores <- 7
@@ -596,10 +604,10 @@ glh_smote_xgb <- grid_latin_hypercube(xgb_smote_param, size=3)
 #                       resamples = fivefold,
 #                       grid = glh_smote_xgb)
 # stopCluster(cl)
-# 
-# saveRDS(xgb_smote_tune, '/Users/colewagner632/Library/CloudStorage/OneDrive-SouthernMethodistUniversity/STAT 6302/Projects/Final Project/xgb_smote_tune.rds')
+#
+# saveRDS(xgb_smote_tune, "rds_files/xgb_smote_tune.rds")
 
-xgb_smote_tune <- readRDS('rds_files/xgb_smote_tune.rds')
+xgb_smote_tune <- readRDS("rds_files/xgb_smote_tune.rds")
 
 xgb_smote_best_param <- xgb_smote_tune %>% select_best(metric = "roc_auc")
 
@@ -610,10 +618,10 @@ xgb_smote_final_wf <- xgb_smote_wf %>%
 # xgb_smote_fit <- last_fit(xgb_smote_final_wf, bankrupt_split,
 #                           metrics = metric_set(accuracy, roc_auc, kap,
 # 			                                   sens, spec, brier_class))
-# 
-# saveRDS(xgb_smote_fit, '/Users/colewagner632/Library/CloudStorage/OneDrive-SouthernMethodistUniversity/STAT 6302/Projects/Final Project/xgb_smote_fit.rds')
+#
+# saveRDS(xgb_smote_fit, "rds_files/xgb_smote_fit.rds")
 
-xgb_smote_fit <- readRDS('rds_files/xgb_smote_fit.rds')
+xgb_smote_fit <- readRDS("rds_files/xgb_smote_fit.rds")
 
 xgb_smote_metrics <- xgb_smote_fit %>% collect_metrics()
 xgb_smote_preds <- xgb_smote_fit %>% collect_predictions()
@@ -626,25 +634,29 @@ xgb_smote_preds <- xgb_smote_fit %>% collect_predictions()
 xgb_smote_probs_facet <- xgb_smote_preds %>%
   ggplot(aes(.pred_Yes)) +
   geom_histogram(col = "white", bins = 40) +
-  facet_wrap(~ class_factor, ncol = 2, scales = "free") +
+  facet_wrap(~class_factor, ncol = 2, scales = "free") +
   theme_bw() +
-  labs(x = "Probability Estimate of Bankrupcy", y = "Count", title = "Predicted Probabilty of Bankrupcy by Actual Outcome (XG Boost w/ SMOTE)")
+  labs(x = "Probability Estimate of Bankrupcy",
+       y = "Count",
+       title = "Predicted Probabilty of Bankrupcy by Actual Outcome (XG Boost w/ SMOTE)")
 
 
 # variable importance plot
 xgb_smote_native <- extract_fit_engine(xgb_smote_fit)
 xgb_smote_vip <- vip(xgb_smote_native) +
   labs(title = "Variable Importance (XG Boost w/ SMOTE)") +
-  scale_x_discrete(labels = c("POA_FE" = "Operating Profit / Financial Expenses",
-                                "GP3Y_TA" = "3 Yr. Gross Profit / Total Assets",
-                              "RE_TA" = "Retained Earnings / Total Assets",
-                              "NP_D_TL" = "(Net Profit + Depreciation) / Total Liablities",
-                              "OE_TL" = "Operating Expenses / Total Liabilities",
-                              "C_STS_R_lSTL_OE_lD_365" = "[($ + ST Sec. + Rec. - ST Lia.) / (Op. Ex. - Dep.)] * 365",
-                              "CA_lI_STL" = "(Current Assets - Inventory) / Short-Term Liabilities",
-                              "S_R" = "Sales / Receivables", 
-                              "TC_TS" = "Total Costs / Total Sales",
-                              "PS_S" = "Profit on Sales / Sales")) +
+  scale_x_discrete(labels = c(
+    "POA_FE" = "Operating Profit / Financial Expenses",
+    "GP3Y_TA" = "3 Yr. Gross Profit / Total Assets",
+    "RE_TA" = "Retained Earnings / Total Assets",
+    "NP_D_TL" = "(Net Profit + Depreciation) / Total Liablities",
+    "OE_TL" = "Operating Expenses / Total Liabilities",
+    "C_STS_R_lSTL_OE_lD_365" = "[($ + ST Sec. + Rec. - ST Lia.) / (Op. Ex. - Dep.)] * 365",
+    "CA_lI_STL" = "(Current Assets - Inventory) / Short-Term Liabilities",
+    "S_R" = "Sales / Receivables",
+    "TC_TS" = "Total Costs / Total Sales",
+    "PS_S" = "Profit on Sales / Sales"
+  )) +
   theme_bw() +
   theme(axis.text.y = element_text(size = 12))
 ```
@@ -653,20 +665,20 @@ xgb_smote_vip <- vip(xgb_smote_native) +
 
 ```{r xgb_pca_smote}
 # create xgb recipe with pca and smote
-xgb_pca_smote_rec <- recipe(class_factor ~ ., data=bankrupt_train) %>%
-                  step_normalize(all_numeric_predictors()) %>%
-                  step_pca(all_predictors(), id = "pca", num_comp = 16) %>%
-                  step_smote(class_factor, over_ratio = 0.75)
+xgb_pca_smote_rec <- recipe(class_factor ~ ., data = bankrupt_train) %>%
+  step_normalize(all_numeric_predictors()) %>%
+  step_pca(all_predictors(), id = "pca", num_comp = 16) %>%
+  step_smote(class_factor, over_ratio = 0.75)
 
 
-xgb_pca_smote_wf <- workflow() %>% 
-                    add_recipe(xgb_pca_smote_rec) %>% 
-                    add_model(xgb_base_model)
+xgb_pca_smote_wf <- workflow() %>%
+  add_recipe(xgb_pca_smote_rec) %>%
+  add_model(xgb_base_model)
 
-xgb_pca_smote_param <- extract_parameter_set_dials(xgb_base_model) %>% 
-                  finalize(juice(prep(xgb_pca_smote_rec)))
+xgb_pca_smote_param <- extract_parameter_set_dials(xgb_base_model) %>%
+  finalize(juice(prep(xgb_pca_smote_rec)))
 
-glh_pca_smote_xgb <- grid_latin_hypercube(xgb_pca_smote_param, size=3)
+glh_pca_smote_xgb <- grid_latin_hypercube(xgb_pca_smote_param, size = 3)
 
 # set.seed(6302)
 # ncores <- 7
@@ -678,10 +690,10 @@ glh_pca_smote_xgb <- grid_latin_hypercube(xgb_pca_smote_param, size=3)
 #                       grid = glh_pca_smote_xgb)
 # stopCluster(cl)
 # #
-# 
-# saveRDS(xgb_pca_smote_tune, '/Users/colewagner632/Library/CloudStorage/OneDrive-SouthernMethodistUniversity/STAT 6302/Projects/Final Project/xgb_pca_smote_tune.rds')
+#
+# saveRDS(xgb_pca_smote_tune, "rds_files/xgb_pca_smote_tune.rds")
 
-xgb_pca_smote_tune <- readRDS('rds_files/xgb_pca_smote_tune.rds')
+xgb_pca_smote_tune <- readRDS("rds_files/xgb_pca_smote_tune.rds")
 
 xgb_pca_smote_best_param <- xgb_pca_smote_tune %>% select_best(metric = "roc_auc")
 
@@ -692,10 +704,10 @@ xgb_pca_smote_final_wf <- xgb_pca_smote_wf %>%
 # xgb_pca_smote_fit <- last_fit(xgb_pca_smote_final_wf, bankrupt_split,
 #                           metrics = metric_set(accuracy, roc_auc, kap,
 # 			                                   sens, spec, brier_class))
-# 
-# saveRDS(xgb_pca_smote_fit, '/Users/colewagner632/Library/CloudStorage/OneDrive-SouthernMethodistUniversity/STAT 6302/Projects/Final Project/xgb_pca_smote_fit.rds')
+#
+# saveRDS(xgb_pca_smote_fit, "rds_files/xgb_pca_smote_fit.rds")
 
-xgb_pca_smote_fit <- readRDS('rds_files/xgb_pca_smote_fit.rds')
+xgb_pca_smote_fit <- readRDS("rds_files/xgb_pca_smote_fit.rds")
 
 xgb_pca_smote_metrics <- xgb_pca_smote_fit %>% collect_metrics()
 ```
@@ -768,16 +780,16 @@ xgb_pca_smote_metrics_form <- xgb_pca_smote_metrics %>%
   select(-name)
 
 # combine all metrics tables and create a kable object
-comb_metrics <- rbind(base_metrics_form, base_smote_metrics_form, pca_smote_base_metrics_form, enet_base_metrics_form,
-                      enet_smote_metrics_form, pca_smote_enet_metrics_form, xgb_base_metrics_form, xgb_smote_metrics_form,
-                      xgb_pca_smote_metrics_form) %>%
+comb_metrics <- rbind(
+  base_metrics_form, base_smote_metrics_form, pca_smote_base_metrics_form, enet_base_metrics_form,
+  enet_smote_metrics_form, pca_smote_enet_metrics_form, xgb_base_metrics_form, xgb_smote_metrics_form,
+  xgb_pca_smote_metrics_form
+) %>%
   rename(Accuracy = accuracy, Brier = brier_class, Kappa = kap, AUC = roc_auc, Sensitivity = sens, Specificity = spec)
 
 metrics_table <- kable(comb_metrics, digits = 3) %>%
   kable_styling(bootstrap_options = "striped", full_width = F)
 metrics_table
-
-
 ```
 
 ## Best Models for Each Framework
@@ -790,8 +802,6 @@ best_comb_metrics <- rbind(pca_smote_base_metrics_form, enet_smote_metrics_form,
 best_metrics_table <- kable(best_comb_metrics, digits = 3, caption = "Table 4 - Overall Model Comparison") %>%
   kable_styling(bootstrap_options = "striped", full_width = F)
 best_metrics_table
-
-
 ```
 
 ## Basic Logistic Regression Comparison
@@ -800,10 +810,10 @@ best_metrics_table
 lr_comb_metrics <- rbind(base_metrics_form, base_smote_metrics_form, pca_smote_base_metrics_form) %>%
   rename(Accuracy = accuracy, Brier = brier_class, Kappa = kap, AUC = roc_auc, Sensitivity = sens, Specificity = spec)
 
-lr_metrics_table <- kable(lr_comb_metrics, digits = 3, caption = "Table 1 - Basic Logistic Regression Model Comparison") %>%
+lr_metrics_table <- kable(lr_comb_metrics, digits = 3,
+                          caption = "Table 1 - Basic Logistic Regression Model Comparison") %>%
   kable_styling(bootstrap_options = "striped", full_width = F)
 lr_metrics_table
-
 ```
 
 ## Elastic Net Comparison
@@ -812,10 +822,10 @@ lr_metrics_table
 enet_comb_metrics <- rbind(enet_base_metrics_form, enet_smote_metrics_form, pca_smote_enet_metrics_form) %>%
   rename(Accuracy = accuracy, Brier = brier_class, Kappa = kap, AUC = roc_auc, Sensitivity = sens, Specificity = spec)
 
-enet_metrics_table <- kable(enet_comb_metrics, digits = 3, caption = "Table 2 - Elastic Net Model Comparison") %>%
+enet_metrics_table <- kable(enet_comb_metrics, digits = 3,
+                            caption = "Table 2 - Elastic Net Model Comparison") %>%
   kable_styling(bootstrap_options = "striped", full_width = F)
 enet_metrics_table
-
 ```
 
 ## XG Boost Comparison
@@ -827,5 +837,4 @@ xgb_comb_metrics <- rbind(xgb_base_metrics_form, xgb_smote_metrics_form, xgb_pca
 xgb_metrics_table <- kable(xgb_comb_metrics, digits = 3, caption = "Table 3 - XG Boost Model Comparison") %>%
   kable_styling(bootstrap_options = "striped", full_width = F)
 xgb_metrics_table
-
 ```
